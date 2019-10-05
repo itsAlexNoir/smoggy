@@ -1,7 +1,7 @@
 import os
 import sys
 import pandas as pd
-import glob
+from tools import database as db
 from absl import app, flags, logging
 
 def define_flags():
@@ -31,8 +31,16 @@ def main(argv):
     logging.info('Extracting data...')
     calendar = get_calendar_from_source(FLAGS.source_path)
 
+    # Put into the database
+    client = db.connect_mongo_daemon(host='localhost', port=27019)
+    calendardb = db.get_mongo_database(client, 'calendar')
+    logging.info('Inserting calendar data...')
+    result = db.insert_many_documents(calendardb, 'calendar', calendar)
+
+
     logging.info('ETL calendar process finished.')
     logging.info('=' * 80)
+
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
