@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-""" dataclean.py
+""" etl_utils.py
 
 This module contain routines for cleaning txt files from the air pollution dataset
 """
@@ -18,7 +18,7 @@ import os
 import pandas as pd
 import glob
 import datetime
-#import json
+from absl import logging
 
 
 ##############################################
@@ -55,8 +55,10 @@ estaciones_meteo = {'Retiro': '3195', 'Aeropuerto': '3129', 'Ciudad_Universitari
 def get_date(year, month, day, hour=0, minute=0):
     return pd.to_datetime('{}-{}-{} {}:{}'.format(year, month, day, hour, minute))
 
+
 def create_date_column(df):
     df['date'] = datetime.date(year=df['año'], month=df['mes'], dia=df['dia'])
+
 
 def parse_pollution_txt(txt_file):
     horasstr = ['H{:02d}'.format(h) for h in range(1, 25)]
@@ -103,48 +105,19 @@ def parse_pollution_txt(txt_file):
 
     cols = {**cols1, **measures, **validez}
 
-    dataf = pd.DataFrame(data=cols)
-    return dataf
+    return pd.DataFrame(data=cols)
 
-def parse_pollution_csv(csv_file):
-    dd = pd.read_csv(csv_file, delimiter=';')
-    dd['TECNICA'] = dd['PUNTO_MUESTREO'].apply(lambda x: int(x.split('_')[-1]))
-    dd.drop(columns=['PUNTO_MUESTREO'], inplace=True)
-    return dd
 
-def extract_pollution_data(txt_path):
-
-    folders = sorted(glob.glob(os.path.join(txt_path, 'raw', 'Anio*')))
-    #print('Getting files from year {}'.format(os.path.basename(folder)[4:8]))
+def convert_pollution_to_csv(source_path):
+    folders = sorted(glob.glob(os.path.join(source_path, 'Anio*')))
+    [logging.info('Getting files from year {}'.format(os.path.basename(folder)[4:8])) for folder in folders]
 
     txt_files = [sorted(glob.glob(os.path.join(folder, '*txt'))) for folder in folders]
-    csv_files = [sorted(glob.glob(os.path.join(folder, '*csv'))) for folder in folders]
-    # Flatten list
-    if len(txt_files) > 1:
-        txt_files = [item for sublist in txt_files for item in sublist]
-    if len(csv_files) > 1:
-        csv_files = [item for sublist in csv_files for item in sublist]
+    # Flatten given list
+    txt_files = [item for sublist in txt_files for item in sublist]
 
     print('Parsing data...')
-    if len(txt_files) > 0:
-        data_from_txt = [parse_pollution_txt(file) for file in txt_files]
+    data = parse_pollution_txt(txt_files[0])
+    #data_from_txt = [parse_pollution_txt(file) for file in txt_files]
 
-    if len(csv_files) > 0:
-        data_from_csv = [parse_pollution_csv(file) for file in csv_files]
-
-    return data_from_txt, data_from_csv
-
-
-##############################################################################
-##############################################################################
-
-if __name__ == '__main__':
-
-    ROOT = "/Users/adelacalle/Desktop"
-    #DATASET_PATH = os.path.join(ROOT, "data/calidad_aire_madrid")
-    DATASET_PATH = '/Users/adelacalle/Downloads'
-    #DESTINATION_PATH = os.path.join(DATASET_PATH, 'csv')
-
-    extract_pollution_data(DATASET_PATH)
-
-    print('Script dataclean finished')
+    return data_from_txt
