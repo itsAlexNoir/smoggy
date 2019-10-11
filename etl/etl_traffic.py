@@ -18,12 +18,17 @@ import numpy as np
 import pandas as pd
 import os
 import glob
-from absl import logging
+from absl import logging, app, flags
 
 from tools import database as db
 
 
 ##################################################################################
+
+
+def define_flags():
+    flags.DEFINE_string(name='source_path', default='.', help='Path to the source of the data')
+
 
 def get_pmed_dataframes_from_paths(path):
     if not os.path.exists(path):
@@ -31,9 +36,10 @@ def get_pmed_dataframes_from_paths(path):
         exit(1)
     else:
         folders = glob.glob(os.path.join(path, 'pmed*'))
-        files = [glob.glob(os.path.join(folder,'*csv'))[0] for folder in folders]
+        files = [glob.glob(os.path.join(folder, '*csv'))[0] for folder in folders]
         dfs = [pd.read_csv(file, delimiter=';', encoding='latin1') for file in files]
     return dfs
+
 
 def get_traffic_density_dataframes_from_paths(path):
     if not os.path.exists(path):
@@ -44,13 +50,14 @@ def get_traffic_density_dataframes_from_paths(path):
         dfs = [pd.read_csv(file, delimiter=';', encoding='latin1') for file in files]
     return dfs
 
+
 def get_location_for_pmeds(dfs):
     # Convert all dataframes into dicts
     dicts = [df.to_dict(orient='index') for df in dfs]
 
     # Iterate. Look for the coordinates columns. Then add a key
     # with the coordinates (in UTM) in each of the entries. 
-    for df, dd in zip(dfs,dicts):
+    for df, dd in zip(dfs, dicts):
         xcol = None
         ycol = None
         for col in df.columns:
@@ -61,43 +68,48 @@ def get_location_for_pmeds(dfs):
         if (xcol is not None) and (ycol is not None):
             for idx in df.index:
                 dd[idx]['location'] = {"coordinates": [df[xcol].iloc[idx], df[xcol].iloc[idx]],
-                                "type":"Point"}
-    
+                                       "type": "Point"}
     # Return the dictionaries
     return dicts
 
-if __name__ == '__main__':
 
+def main(argv):
     logging.info('Initializing ETL for traffic data...')
     logging.info('------------------------------------\n')
 
-    DATA_PATH = '/Users/adelacalle/Documents/master_data/data/trafico_madrid/ubicacion_puntos_medida/ubicacion'
-    DENSITY_PATH = '/Users/adelacalle/Documents/master_data/data/trafico_madrid/intensidad_trafico/csv'
-
     # logging.info('Get measure points dataframes from path')
-    # dfs = get_pmed_dataframes_from_paths(DATA_PATH)
+    dfs = get_pmed_dataframes_from_paths(os.path.join(FLAGS.source_path,
+                                                      'ubicacion_puntos_medida', 'ubicacion'))
 
     # logging.info('Get pmed dictionaries with location info')
-    # pmed_dicts = get_location_for_pmeds(dfs)
+    pmed_dicts = get_location_for_pmeds(dfs)
 
     # # Connect with the mongo daemon
     client = db.connect_mongo_daemon(host='localhost', port=27019)
     logging.info('Creating traffic database')
     traffic = db.get_mongo_database(client, 'traffic')
-    
+
     # logging.info('Creating pmed (measure points) collection for traffic database')
-    # pmed_col = db.get_mongo_collection(traffic, 'pmed')
+    # pmed_coll = db.get_mongo_collection(traffic, 'pmed')
 
     # logging.info('Inserting entries from dataframes')
     # for dd in pmed_dicts:
     #     result = db.insert_many_documents(traffic, 'pmed', [d for d in dd.values()])
     # logging.info('Insertion ended')
+    # logging.info('Creating geospatial index...')
+    # pmed_coll.create_index([("location", pymongo.GEOSPHERE)])
+    # logging.info('------------------------------------\n')
 
-    logging.info('------------------------------------\n')
-    
-    logging.info('Creating density collection for traffic database')
-    density_col = db.get_mongo_collection(traffic, 'density')
-    
-    density_dfs = get_traffic_density_dataframes_from_paths(DENSITY_PATH)
+    # logging.info('Creating density collection for traffic database')
+    # density_col = db.get_mongo_collection(traffic, 'density')
+
+    # density_dfs = get_traffic_density_dataframes_from_paths(os.path.join(FLAGS.source_path,
+    #                                                                    'intensidad_trafico', 'csv'))
 
     logging.info('ETL process finished!')
+
+
+if __name__ == '__main__':
+    FLAGS = flags.FLAGS
+    define_flags()
+    app.run(main)
