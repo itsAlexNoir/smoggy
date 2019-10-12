@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 import os
 import glob
+from pyproj import Proj
+import pymongo
 from absl import logging, app, flags
 
 from tools import database as db
@@ -38,7 +40,7 @@ def get_pmed_dataframes_from_paths(path):
         folders = glob.glob(os.path.join(path, 'pmed*'))
         files = [glob.glob(os.path.join(folder, '*csv'))[0] for folder in folders]
         dfs = [pd.read_csv(file, delimiter=';', encoding='latin1') for file in files]
-    return dfs
+    return dict(zip(files, dfs))
 
 
 def get_traffic_density_dataframes_from_paths(path):
@@ -48,16 +50,18 @@ def get_traffic_density_dataframes_from_paths(path):
     else:
         files = glob.glob(os.path.join(path, '*csv'))
         dfs = [pd.read_csv(file, delimiter=';', encoding='latin1') for file in files]
-    return dfs
+    return dict(zip(files, dfs))
 
 
 def get_location_for_pmeds(dfs):
+    # Define the projector, to transform from UTM to lat/lon coordinates
+    myProj = Proj("+proj=utm +zone=30N, +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
     # Convert all dataframes into dicts
-    dicts = [df.to_dict(orient='index') for df in dfs]
-
+    dicts = [df.to_dict(orient='index') for df in dfs.values()]
     # Iterate. Look for the coordinates columns. Then add a key
     # with the coordinates (in UTM) in each of the entries. 
-    for df, dd in zip(dfs, dicts):
+    for file, df, dd in zip(dfs.keys(), dfs.values(), dicts):
+        logging.info('Extracting from ' + file)
         xcol = None
         ycol = None
         for col in df.columns:
@@ -66,9 +70,24 @@ def get_location_for_pmeds(dfs):
             elif ("y" in col) or ("Y" in col):
                 ycol = col
         if (xcol is not None) and (ycol is not None):
+            if df[xcol].dtype != 'float64':
+                xutm = df[xcol].apply(lambda x: x.replace(',', '.')).astype(np.float64).values
+            else:
+                xutm = df[xcol].values
+            if df[ycol].dtype != 'float64':
+                yutm = df[ycol].apply(lambda x: x.replace(',', '.')).astype(np.float64).values
+            else:
+                yutm = df[ycol].values
+
+            if np.isnan(xutm).any():
+                logging.info('NaN value found at ' + file)
+                continue
+            if np.isnan(yutm).any():
+                logging.info('NaN value found at ' + file)
+                continue
+            lon, lat = myProj(xutm, yutm, inverse=True)
             for idx in df.index:
-                dd[idx]['location'] = {"coordinates": [df[xcol].iloc[idx], df[xcol].iloc[idx]],
-                                       "type": "Point"}
+                dd[idx]['location'] = {"coordinates": [lon[idx], lat[idx]], "type": "Point"}
     # Return the dictionaries
     return dicts
 
@@ -77,11 +96,11 @@ def main(argv):
     logging.info('Initializing ETL for traffic data...')
     logging.info('------------------------------------\n')
 
-    # logging.info('Get measure points dataframes from path')
+    logging.info('Get measure points dataframes from path')
     dfs = get_pmed_dataframes_from_paths(os.path.join(FLAGS.source_path,
                                                       'ubicacion_puntos_medida', 'ubicacion'))
 
-    # logging.info('Get pmed dictionaries with location info')
+    logging.info('Get pmed dictionaries with location info')
     pmed_dicts = get_location_for_pmeds(dfs)
 
     # # Connect with the mongo daemon
@@ -90,21 +109,20 @@ def main(argv):
     traffic = db.get_mongo_database(client, 'traffic')
 
     # logging.info('Creating pmed (measure points) collection for traffic database')
-    # pmed_coll = db.get_mongo_collection(traffic, 'pmed')
+    pmed_coll = db.get_mongo_collection(traffic, 'pmed')
 
-    # logging.info('Inserting entries from dataframes')
-    # for dd in pmed_dicts:
-    #     result = db.insert_many_documents(traffic, 'pmed', [d for d in dd.values()])
-    # logging.info('Insertion ended')
-    # logging.info('Creating geospatial index...')
-    # pmed_coll.create_index([("location", pymongo.GEOSPHERE)])
-    # logging.info('------------------------------------\n')
+    logging.info('Inserting entries from dataframes')
+    for dd in pmed_dicts:
+        result = db.insert_many_documents(traffic, 'pmed', [d for d in dd.values()])
+    logging.info('Insertion ended')
+    logging.info('Creating geospatial index...')
+    pmed_coll.create_index([("location", pymongo.GEOSPHERE)])
+    logging.info('------------------------------------\n')
 
-    # logging.info('Creating density collection for traffic database')
-    # density_col = db.get_mongo_collection(traffic, 'density')
-
-    # density_dfs = get_traffic_density_dataframes_from_paths(os.path.join(FLAGS.source_path,
-    #                                                                    'intensidad_trafico', 'csv'))
+    logging.info('Creating density collection for traffic database')
+    density_col = db.get_mongo_collection(traffic, 'density')
+    density_dfs = get_traffic_density_dataframes_from_paths(os.path.join(FLAGS.source_path,
+                                                                         'intensidad_trafico', 'csv'))
 
     logging.info('ETL process finished!')
 

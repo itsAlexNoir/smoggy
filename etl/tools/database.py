@@ -14,18 +14,16 @@ __email__ = "alejandrodelacallenegro@gmail.com"
 __status__ = "Development"
 
 
-import os
-from pymongo import MongoClient
-import glob
-import datetime
+#from pymongo import MongoClient
+import pymongo
 
 #MONGO_CONFIG = '/Volumes/TRIPLET/db/mongod_airdb.conf'
 
 def connect_mongo_daemon(host=None, port=None):
     if host is None and port is None:
-        client = MongoClient()
+        client = pymongo.MongoClient()
     else:
-        client = MongoClient(host, port)
+        client = pymongo.MongoClient(host, port)
     return client
 
 def get_mongo_database(client, dbname):
