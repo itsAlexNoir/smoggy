@@ -10,12 +10,12 @@ def define_flags():
 def get_calendar_from_source(source_path):
     df = pd.read_csv(os.path.join(source_path, 'calendario.csv'),
                      encoding='latin1', delimiter=';')
-    df['Fecha'] = df['Dia'].apply(lambda x: pd.to_datetime(x, format='%d/%M/%Y'))
-    df['Día'] = df['Fecha'].apply(lambda x: x.day)
-    df['Mes'] = df['Fecha'].apply(lambda x: x.month)
-    df['Año'] = df['Fecha'].apply(lambda x: x.year)
+    df['date'] = df['Dia'].apply(lambda x: pd.to_datetime(x, format='%d/%m/%Y'))
+    df['Día'] = df['date'].apply(lambda x: x.day)
+    df['Mes'] = df['date'].apply(lambda x: x.month)
+    df['Año'] = df['date'].apply(lambda x: x.year)
 
-    return [val for val in df.drop(columns=['Fecha']).to_dict(orient='index').values()]
+    return [val for val in df.to_dict(orient='index').values()]
 
 
 def main(argv):

@@ -17,6 +17,7 @@ import os
 import sys
 import glob
 import json
+import pandas as pd
 import datetime
 from absl import flags, app, logging
 from tools import database as db
@@ -28,8 +29,12 @@ def define_flags():
 
 def get_weather_stations(source_path):
     weather_stations_file = os.path.join(source_path, 'estaciones_meteo.json')
-    with open(weather_stations_file, 'r') as f:
-        return json.load(f)
+    stations = pd.read_json(weather_stations_file)
+    #stations['lon'] = stations['longitud'].apply(lambda x: -1 * float(x[:-1]) if x[-1] == 'W' else float(x[:-1]))
+    #stations['lon'] = stations['longitud'].apply(lambda x: -1 * float(x[:-1]) if x[-1] == 'W' else float(x[:-1]))
+    #with open(weather_stations_file, 'r') as f:
+    #    return json.load(f)
+    return [sta for sta in stations.to_dict(orient='index').values()]
 
 
 def get_weather_historic(source_path):
@@ -56,7 +61,7 @@ def main(argv):
     ## CLIMATE INFO
     # Let's import climate data from disk and insert them into the database
     logging.info('Creating climate collection')
-    stations = db.get_mongo_collection(weather, 'stations')
+    stations_coll = db.get_mongo_collection(weather, 'stations')
 
     logging.info('ETL weather stations...')
     stations = get_weather_stations(FLAGS.source_path)
@@ -66,10 +71,11 @@ def main(argv):
     logging.info('Starting at ' + datetime.datetime.now().strftime('%d/%m/%Y - %H:%m:%s'))
     weather_files = get_weather_historic(FLAGS.source_path)
     for file in weather_files:
-        with open(file, 'r') as f:
-            weather_data = json.load(f)
+        weather_data = pd.read_json(file)
+        weather_data['date'] = pd.to_datetime(weather_data['fecha'], format='%Y-%m-%d')
+        weather_dict = [val for val in weather_data.to_dict(orient='index').values()]
         logging.info('Inserting from {} into weather historic collection...'.format(file))
-        result = db.insert_many_documents(weather, 'historic', weather_data)
+        result = db.insert_many_documents(weather, 'historic', weather_dict)
     logging.info('Creation database finished at ' + datetime.datetime.now().strftime('%d/%m/%Y - %H:%m:%s'))
 
     logging.info('=' * 80)
