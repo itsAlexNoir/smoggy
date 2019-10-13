@@ -37,11 +37,11 @@ def main(argv):
     #weather_coll = client['weather']['historic']
     #weather = [cal for cal in weather_coll.find({"date": {"$gte": start_date, "$lte": end_date}})]
 
-    #
+    # Load pollution stations
     stations_coll = client['pollution']['stations']
     stations = [st for st in stations_coll.find()]
-    #df = pd.DataFrame({'Date': calendar_date, 'Festivo': one_hot_festivo})
 
+    # Load traffic measure points
     pmed_coll = client['traffic']['pmed']
     closest = {}
     distances = {'near': [0, 500], 'medium': [500, 1000], 'far': [1000, 1500]}
@@ -61,6 +61,17 @@ def main(argv):
             if len(list(pmed_list)) != 0:
                 closest[station['CODIGO_CORTO']][key] = pd.DataFrame(list(pmed_list))['id'].dropna().unique()
 
+    # Extract traffic density data
+    density_coll = client['traffic']['density']
+
+    logging.info('Retrieve info for a density info')
+    start_time = datetime.datetime(2018, 1, 1)
+    end_time = datetime.datetime(2019, 1, 1)
+    one_hour = pd.Timedelta(hours=1)
+    for ihour in range(10):
+        query_date = start_date + one_hour * ihour
+        density_hour = [den for den in density_coll.find({"date": query_date, "id": 1001})]
+    # df = pd.DataFrame({'Date': calendar_date, 'Festivo': one_hot_festivo})
     logging.info('_'*80)
     logging.info('Finished dataset generation!')
     logging.info('_' * 80 + '\n')

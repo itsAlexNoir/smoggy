@@ -43,14 +43,24 @@ def get_pmed_dataframes_from_paths(path):
     return dict(zip(files, dfs))
 
 
-def get_traffic_density_dataframes_from_paths(path):
+def insert_traffic_density_dataframes_to_db(path, database, coll):
     if not os.path.exists(path):
         logging.error('Given path for density dataframes does not exists.')
         exit(1)
     else:
         files = glob.glob(os.path.join(path, '*csv'))
-        dfs = [pd.read_csv(file, delimiter=';', encoding='latin1') for file in files]
-    return dict(zip(files, dfs))
+        chunksize = 10 ** 4
+        logging.info('Inserting dataframes...')
+        for file in files:
+            logging.info('Loading dataframe from ' + file)
+            logging.info('Processing dataframes with chunk size: {}'.format(chunksize))
+            df_chunk = pd.read_csv(file, delimiter=';', encoding='latin1', chunksize=chunksize)
+            for chunk_id, chunk in enumerate(df_chunk):
+                logging.info('Processing chunk number {}'.format(chunk_id))
+                chunk['date'] = pd.to_datetime(chunk['fecha'])
+                chunk.drop(columns='fecha', inplace=True)
+                density = [entry for entry in chunk.to_dict(orient='index').values()]
+                db.insert_many_documents(database, coll, density)
 
 
 def get_location_for_pmeds(dfs):
@@ -119,11 +129,14 @@ def main(argv):
     pmed_coll.create_index([("location", pymongo.GEOSPHERE)])
     logging.info('------------------------------------\n')
 
-    logging.info('Creating density collection for traffic database')
-    density_col = db.get_mongo_collection(traffic, 'density')
-    density_dfs = get_traffic_density_dataframes_from_paths(os.path.join(FLAGS.source_path,
-                                                                         'intensidad_trafico', 'csv'))
+    logging.info('Processing density collection for traffic database')
+    density_coll = db.get_mongo_collection(traffic, 'density')
+    insert_traffic_density_dataframes_to_db(os.path.join(FLAGS.source_path,
+                                            'intensidad_trafico', 'csv'),
+                                            traffic, 'density')
 
+    # Create a compound index for effcient quering
+    density_coll.create_index([("date", -1), ("id", 1)], name='traffic_index')
     logging.info('ETL process finished!')
 
 
