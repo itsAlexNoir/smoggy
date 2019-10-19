@@ -29,8 +29,9 @@ from tools import database as db
 
 
 def define_flags():
-    flags.DEFINE_string(name='source_path', default='.', help='Path to the source of the data')
-
+    flags.DEFINE_string(name='source_path', default='.', help='Path to the source of the data.')
+    flags.DEFINE_string(name='host', default='localhost', help='Host for Mongo DB database.')
+    flags.DEFINE_integer(name='port', default=27019, help='Port connection to Mongo DB database.')
 
 def get_pmed_dataframes_from_paths(path):
     if not os.path.exists(path):
@@ -56,7 +57,8 @@ def insert_traffic_density_dataframes_to_db(path, database, coll):
             logging.info('Processing dataframes with chunk size: {}'.format(chunksize))
             df_chunk = pd.read_csv(file, delimiter=';', encoding='latin1', chunksize=chunksize)
             for chunk_id, chunk in enumerate(df_chunk):
-                logging.info('Processing chunk number {}'.format(chunk_id))
+                if chunk_id % 100 ==0:
+                    logging.info('Processing chunk number {}'.format(chunk_id))
                 chunk['date'] = pd.to_datetime(chunk['fecha'])
                 chunk.drop(columns='fecha', inplace=True)
                 density = [entry for entry in chunk.to_dict(orient='index').values()]
@@ -69,7 +71,7 @@ def get_location_for_pmeds(dfs):
     # Convert all dataframes into dicts
     dicts = [df.to_dict(orient='index') for df in dfs.values()]
     # Iterate. Look for the coordinates columns. Then add a key
-    # with the coordinates (in UTM) in each of the entries. 
+    # with the coordinates (in UTM) in each of the entries.
     for file, df, dd in zip(dfs.keys(), dfs.values(), dicts):
         logging.info('Extracting from ' + file)
         xcol = None
@@ -113,12 +115,12 @@ def main(argv):
     logging.info('Get pmed dictionaries with location info')
     pmed_dicts = get_location_for_pmeds(dfs)
 
-    # # Connect with the mongo daemon
-    client = db.connect_mongo_daemon(host='localhost', port=27019)
+    # Connect with the mongo daemon
+    client = db.connect_mongo_daemon(host=FLAGS.host, port=FLAGS.port)
     logging.info('Creating traffic database')
     traffic = db.get_mongo_database(client, 'traffic')
 
-    # logging.info('Creating pmed (measure points) collection for traffic database')
+    logging.info('Creating pmed (measure points) collection for traffic database')
     pmed_coll = db.get_mongo_collection(traffic, 'pmed')
 
     logging.info('Inserting entries from dataframes')

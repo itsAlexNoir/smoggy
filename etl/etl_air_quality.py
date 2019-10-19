@@ -45,7 +45,11 @@ def main(argv):
     insert_pollution_docs_to_db(os.path.join(FLAGS.source_path, 'contaminantes',  'historico'),
                                 pollutiondb, 'pollutants')
 
+    # Create index
+    pollutants_coll = db.get_mongo_collection(pollutiondb, 'pollutants')
+    pollutants_coll.create_index([("date", -1), ("magnitud", 1)], name='pollutant_index')
 
+    # Closing script
     logging.info('ETL air_quality process finished.')
     logging.info('=' * 80)
 
