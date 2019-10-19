@@ -4,7 +4,8 @@ import glob
 import pandas as pd
 from absl import app, logging, flags
 from tools import database as db
-from tools import etl_utils as utils
+from tools.etl_utils import insert_pollution_docs_to_db
+
 
 
 def define_flags():
@@ -17,12 +18,6 @@ def get_air_stations(source_path):
     stations.drop(columns=stations.columns[0], inplace=True)
     return [val for val in stations.to_dict(orient='index').values()]
 
-
-def get_air_files(source_path):
-    air_files = glob.glob(os.path.join(source_path, 'Anio*'))
-    file = air_files[0]
-    df = pd.read_csv(file, encoding='latin1', delimiter=',')
-    print('jarl')
 
 def main(argv):
 
@@ -43,13 +38,13 @@ def main(argv):
     # Load station info
     logging.info('Inserting pollution stations data...')
     stations = get_air_stations(FLAGS.source_path)
-    result = db.insert_many_documents(pollutiondb, 'stations', stations)
+    #result = db.insert_many_documents(pollutiondb, 'stations', stations)
 
     # First, all the data are in txt. It must be converted to csv
     # for easier manipulation
-    data = utils.convert_pollution_to_csv(os.path.join(FLAGS.source_path, 'txt'))
+    insert_pollution_docs_to_db(os.path.join(FLAGS.source_path, 'contaminantes',  'historico'),
+                                pollutiondb, 'pollutants')
 
-    air_files = get_air_files(FLAGS.source_path)
 
     logging.info('ETL air_quality process finished.')
     logging.info('=' * 80)

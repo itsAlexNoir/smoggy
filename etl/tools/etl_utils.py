@@ -5,7 +5,7 @@ This module contain routines for cleaning txt files from the air pollution datas
 """
 
 __author__ = "Alejandro de la Calle"
-__copyright__ = "Copyright 2018"
+__copyright__ = "Copyright 2019"
 __credits__ = [""]
 __license__ = ""
 __version__ = "0.1"
@@ -15,9 +15,10 @@ __status__ = "Development"
 
 
 import os
+import re
 import pandas as pd
 import glob
-import datetime
+from tools import database as db
 from absl import logging
 
 
@@ -52,17 +53,46 @@ estaciones_meteo = {'Retiro': '3195', 'Aeropuerto': '3129', 'Ciudad_Universitari
 ################################################################################
 
 
-def get_date(year, month, day, hour=0, minute=0):
-    return pd.to_datetime('{}-{}-{} {}:{}'.format(year, month, day, hour, minute))
+def dms2dec(dms_str):
+    """  Return decimal representation of DMS
 
+    Minutes, Seconds formatted coordinate strings to decimal.
 
-def create_date_column(df):
-    df['date'] = datetime.date(year=df['año'], month=df['mes'], dia=df['dia'])
+    Formula:
+    DEC = (DEG + (MIN * 1/60) + (SEC * 1/60 * 1/60))
+
+    Assumes S/W are negative.
+
+    dms2dec(utf8(48°53'10.18"N))
+    48.8866111111F
+
+    dms2dec(utf8(2°20'35.09"E))
+    2.34330555556F
+
+    dms2dec(utf8(48°53'10.18"S))
+    -48.8866111111F
+
+    dms2dec(utf8(2°20'35.09"W))
+    -2.34330555556F
+    """
+    dms_str = re.sub(r'\s', '', dms_str)
+    sign = -1 if re.search('[swSW]', dms_str) else 1
+    numbers = [*filter(len, re.split('\D+', dms_str, maxsplit=4))]
+
+    degree = numbers[0]
+    minute = numbers[1] if len(numbers) >= 2 else '0'
+    second = numbers[2] if len(numbers) >= 3 else '0'
+    frac_seconds = numbers[3] if len(numbers) >= 4 else '0'
+
+    second += "." + frac_seconds
+    return sign * (int(degree) + float(minute) / 60 + float(second) / 3600)
 
 
 def parse_pollution_txt(txt_file):
     horasstr = ['H{:02d}'.format(h) for h in range(1, 25)]
     valstr = ['V{:02d}'.format(v) for v in range(1, 25)]
+    horasstr[-1] = 'H00'
+    valstr[-1] = 'V00'
 
     cod_provincia = []
     cod_municipio = []
@@ -100,15 +130,54 @@ def parse_pollution_txt(txt_file):
     measures = dict(zip(horasstr, horas))
     validez = dict(zip(valstr, val))
 
-    cols1 = {'PROVINCIA': cod_provincia, 'MUNICIPIO': cod_municipio, 'ESTACION': cod_estacion,
-             'MAGNITUD': cod_magnitud, 'TECNICA': cod_tecnica, 'ANO': anno, 'MES': mes, 'DIA': dia}
+    cols1 = {'provincia': cod_provincia, 'municipio': cod_municipio, 'station': cod_estacion,
+             'magnitud': cod_magnitud, 'tecnica': cod_tecnica,
+             'year': anno, 'month': mes, 'day': dia}
 
     cols = {**cols1, **measures, **validez}
+    df = pd.DataFrame(data=cols)
+    df['year'] = df['year'].apply(lambda x: '20'+ x)
+    pollution_month = []
+    for hora in horasstr:
+        common_cols = ['station', 'magnitud']
+        date_cols = ['year', 'month', 'day', 'hour']
+        df['hour'] = hora[-2:]
+        dd = df[common_cols]
+        dd['dates'] = pd.to_datetime(df.loc[:, date_cols])
+        if hora == 'H00':
+            dd['dates'] += pd.Timedelta(1, unit='day')
+        dd['value'] = df[hora]
+        pollution_month.append(list(dd.to_dict(orient='index').values()))
 
-    return pd.DataFrame(data=cols)
+    return [item for sublist in pollution_month for item in sublist]
+
+def parse_pollution_csv(csv_file):
+    horasstr = ['H{:02d}'.format(h) for h in range(1, 25)]
+    # valstr = ['V{:02d}'.format(v) for v in range(1, 25)]
+    horasstr[-1] = 'H00'
+    #valstr[-1] = 'V00'
+
+    df = pd.read_csv(csv_file, delimiter=';')
+    df.rename(columns={'H24': 'H00', 'V24': 'V00',
+                       'ANO': 'year', 'MES': 'month',
+                       'DIA': 'day', 'ESTACION': 'station',
+                       'MAGNITUD': 'magnitud'}, inplace=True)
+    pollution_month = []
+    for hora in horasstr:
+        common_cols = ['station', 'magnitud']
+        date_cols = ['year', 'month', 'day', 'hour']
+        df['hour'] = hora[-2:]
+        dd = df[common_cols]
+        dd['dates'] = pd.to_datetime(df.loc[:, date_cols])
+        if hora == 'H00':
+            dd['dates'] += pd.Timedelta(1, unit='day')
+        dd['value'] = df[hora]
+        pollution_month.append(list(dd.to_dict(orient='index').values()))
+
+    return [item for sublist in pollution_month for item in sublist]
 
 
-def convert_pollution_to_csv(source_path):
+def insert_pollution_docs_to_db(source_path, database, coll):
     folders = sorted(glob.glob(os.path.join(source_path, 'Anio*')))
     [logging.info('Getting files from year {}'.format(os.path.basename(folder)[4:8])) for folder in folders]
 
@@ -116,8 +185,19 @@ def convert_pollution_to_csv(source_path):
     # Flatten given list
     txt_files = [item for sublist in txt_files for item in sublist]
 
-    print('Parsing data...')
-    data = parse_pollution_txt(txt_files[0])
-    #data_from_txt = [parse_pollution_txt(file) for file in txt_files]
+    csv_files = [sorted(glob.glob(os.path.join(folder, '*csv'))) for folder in folders]
+    # Flatten given list
+    csv_files = [item for sublist in csv_files for item in sublist]
 
-    return data_from_txt
+    logging.info('Parsing data...')
+    for file in txt_files:
+         logging.info('Parsing ' + os.path.basename(file))
+         pollutants = parse_pollution_txt(file)
+         result = db.insert_many_documents(database, coll, pollutants)
+
+    for file in csv_files:
+        logging.info('Parsing ' + os.path.basename(file))
+        pollutants = parse_pollution_csv(file)
+        result = db.insert_many_documents(database, coll, pollutants)
+
+    logging.info('Insertion finished')
