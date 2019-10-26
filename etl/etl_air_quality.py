@@ -7,7 +7,6 @@ from tools import database as db
 from tools.etl_utils import insert_pollution_docs_to_db
 
 
-
 def define_flags():
     flags.DEFINE_string(name='source_path', default='.', help='Path to the source of the data')
 
@@ -38,7 +37,7 @@ def main(argv):
     # Load station info
     logging.info('Inserting pollution stations data...')
     stations = get_air_stations(FLAGS.source_path)
-    #result = db.insert_many_documents(pollutiondb, 'stations', stations)
+    result = db.insert_many_documents(pollutiondb, 'stations', stations)
 
     # First, all the data are in txt. It must be converted to csv
     # for easier manipulation
@@ -47,7 +46,9 @@ def main(argv):
 
     # Create index
     pollutants_coll = db.get_mongo_collection(pollutiondb, 'pollutants')
-    pollutants_coll.create_index([("date", -1), ("magnitud", 1)], name='pollutant_index')
+    pollutants_coll.create_index([("dates", -1), ("magnitud", 1)], name='pollutant_index')
+    pollutants_coll.create_index([("station", 1), ("magnitud", 1)], name='pollutant_plus_station_index')
+    pollutants_coll.create_index([("station", 1), ("dates", -1), ("magnitud", 1)], name='pollutant_all_index')
 
     # Closing script
     logging.info('ETL air_quality process finished.')

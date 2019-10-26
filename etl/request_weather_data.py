@@ -25,7 +25,7 @@ def define_flags():
     flags.DEFINE_list(name='init_date', default=None, help='Initial date of the request')
     flags.DEFINE_list(name='end_date', default=None, help='Initial date of the request')
     flags.DEFINE_string(name='station', default=None, help='Station info')
-    flags.DEFINE_string(name='apikey',default='./api-key', help='Path to the API key')
+    flags.DEFINE_string(name='apikey', default='./api-key', help='Path to the API key')
     flags.DEFINE_string(name='output_path', default='None', help='Path to the output folder')
 
 
@@ -72,8 +72,8 @@ def main(argv):
         logging.info('A Initial and end data for requesting data is mandatory. Please provide one.')
         sys.exit(1)
 
-    init_date = utils.get_date(FLAGS.init_date[2], FLAGS.init_date[1], FLAGS.init_date[0])
-    end_date = utils.get_date(FLAGS.end_date[2], FLAGS.end_date[1], FLAGS.end_date[0])
+    init_date = pd.to_datetime('{}-{}-{}'.format(FLAGS.init_date[1], FLAGS.init_date[1], FLAGS.init_date[2]), format='%d-%m-%Y')
+    end_date = pd.to_datetime('{}-{}-{}'.format(FLAGS.end_date[0], FLAGS.end_date[1], FLAGS.end_date[2]), format='%d-%m-%Y')
 
     starting_months = pd.date_range(init_date, end_date, freq='MS')
     ending_months = pd.date_range(init_date, end_date, freq='M')

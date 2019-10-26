@@ -16,6 +16,7 @@ __status__ = "Development"
 
 import os
 import re
+import numpy as np
 import pandas as pd
 import glob
 from tools import database as db
@@ -136,7 +137,9 @@ def parse_pollution_txt(txt_file):
 
     cols = {**cols1, **measures, **validez}
     df = pd.DataFrame(data=cols)
-    df['year'] = df['year'].apply(lambda x: '20'+ x)
+    df['year'] = df['year'].apply(lambda x: '20' + x)
+    df['magnitud'] = df['magnitud'].astype(np.int32)
+    df['station'] = df['station'].astype(np.int32)
     pollution_month = []
     for hora in horasstr:
         common_cols = ['station', 'magnitud']
@@ -146,7 +149,7 @@ def parse_pollution_txt(txt_file):
         dd['dates'] = pd.to_datetime(df.loc[:, date_cols])
         if hora == 'H00':
             dd['dates'] += pd.Timedelta(1, unit='day')
-        dd['value'] = df[hora]
+        dd['value'] = df[hora].astype(np.float32)
         pollution_month.append(list(dd.to_dict(orient='index').values()))
 
     return [item for sublist in pollution_month for item in sublist]
