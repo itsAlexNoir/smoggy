@@ -8,7 +8,8 @@ from ptools import plotting
 
 
 def define_flags():
-    flags.DEFINE_string(name='source_path', default=None, help='Path to the source of the data')
+    flags.DEFINE_string(name='source_file', default=None, help='Path to the source of the data')
+    flags.DEFINE_bool(name='univariate', default=True, help='Choose if create an univariate dataset')
 
 
 def univariate_data(dataset, start_index, end_index, history_size, target_size):
@@ -29,34 +30,31 @@ def univariate_data(dataset, start_index, end_index, history_size, target_size):
 
 def main(argv):
     logging.info('='*80)
-    logging.info(' '*20 + 'Create dataset')
+    logging.info(' ' * 20 + 'Create dataset')
     logging.info('=' * 80 + '\n')
 
-    univariate = True
-    df = pd.read_pickle(os.path.join(FLAGS.source_path, 'air_df.pkl'))
-
-    if univariate:
-        df = df[df['station'] == 4]
+    df = pd.read_pickle(FLAGS.source_file)
+    if FLAGS.univariate:
         df = df[df['magnitud'] == 8]
 
         n_obs = len(df.index)
-        TEST_SPLIT = int(n_obs * 0.15)
-        TRAIN_SPLIT = n_obs - TEST_SPLIT
+        test_split = int(n_obs * 0.15)
+        train_split = n_obs - test_split
         uni_data = df['value']
         uni_data.index = df['date']
 
         uni_data = uni_data.values
-        uni_mean = uni_data[:TRAIN_SPLIT].mean()
-        uni_std = uni_data[:TRAIN_SPLIT].std()
+        uni_mean = uni_data[:train_split].mean()
+        uni_std = uni_data[:train_split].std()
         uni_data = (uni_data - uni_mean) / uni_std
 
         univariate_past_history = 10
         univariate_future_target = 0
 
-        x_train_uni, y_train_uni = univariate_data(uni_data, 0, TRAIN_SPLIT,
+        x_train_uni, y_train_uni = univariate_data(uni_data, 0, train_split,
                                                    univariate_past_history,
                                                    univariate_future_target)
-        x_val_uni, y_val_uni = univariate_data(uni_data, TRAIN_SPLIT, None,
+        x_val_uni, y_val_uni = univariate_data(uni_data, train_split, None,
                                                univariate_past_history,
                                                univariate_future_target)
 

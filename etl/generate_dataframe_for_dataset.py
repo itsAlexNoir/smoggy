@@ -16,17 +16,18 @@ from functools import partial
 import multiprocessing as mp
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
-
 from tools import database as db
 
 # lon/lat coordinates for Puerta del Sol (Madrid city central point)
 PUERTA_SOL = [-3.703339, 40.416729]
 
-
 def define_flags():
     flags.DEFINE_list(name='start_date', default=None, help='Initial date of the request')
     flags.DEFINE_list(name='end_date', default=None, help='Initial date of the request')
     flags.DEFINE_string(name='output_folder', default=None, help='Path to the output folder')
+    flags.DEFINE_integer(name='station', default=None, help='Pollution station number to be selected')
+    flags.DEFINE_string(name='host', default='localhost', help='Host for Mongo DB database.')
+    flags.DEFINE_integer(name='port', default=27019, help='Port connection to Mongo DB database.')
 
 
 def get_calendar_features(database, start, end):
@@ -36,12 +37,33 @@ def get_calendar_features(database, start, end):
         [0 if cal['laborable / festivo / domingo festivo'] == 'laborable' else 1 for cal in calendar])
     calendar_date = pd.Series(['{:02d}-{:02d}-{:4d}'.format(cal["Día"], cal["Mes"], cal["Año"]) for cal in calendar])
     calendar_date = pd.to_datetime(calendar_date, format='%d-%m-%Y')
-    return pd.DataFrame({'Date': calendar_date, 'Festivo': one_hot_festivo})
+    day = calendar_date.apply(lambda x: x.day)
+    month = calendar_date.apply(lambda x: x.month)
+    year = calendar_date.apply(lambda x: x.year)
+    cal = pd.DataFrame(data={"date": calendar_date, "day": day, "month": month, "year": year,
+                             "festivo": one_hot_festivo})
+    dd = pd.date_range(min(calendar_date), max(calendar_date), freq='H')
+    vals_per_hour = [cal[(cal['day'] == d.day) & (cal['month'] == d.month) & (cal['year'] == d.year)][
+              'festivo'].values[0] for d in dd]
+    return pd.DataFrame({'date': dd, 'festivo': vals_per_hour})
 
 
 def get_weather_features(database, start, end):
     weather_coll = database['weather']['historic']
-    weather = [cal for cal in weather_coll.find({"date": {"$gte": start, "$lte": end}})]
+    weather_cols = ['tmed', 'prec', 'velmedia', 'date']
+    weather_daily = pd.DataFrame([w for w in weather_coll.find({"date": {"$gte": start, "$lte": end}})])
+    weather_daily = weather_daily[weather_cols]
+    weather_daily['day'] = weather_daily['date'].apply(lambda x: x.day)
+    weather_daily['month'] = weather_daily['date'].apply(lambda x: x.month)
+    weather_daily['year'] = weather_daily['date'].apply(lambda x: x.year)
+
+    dd = pd.date_range(min(weather_daily['date']), max(weather_daily['date']), freq='H')
+    vals_per_hour = [weather_daily[(weather_daily['day'] == d.day) & (weather_daily['month'] == d.month) &
+                                   (weather_daily['year'] == d.year)][weather_cols].values[0] for d in dd]
+    tmed = [v[0] for v in vals_per_hour]
+    prec = [v[1] for v in vals_per_hour]
+    velmed = [v[2] for v in vals_per_hour]
+    return pd.DataFrame({'date': dd, 'tmed': tmed, 'prec': prec, 'velmed': velmed})
 
 
 def get_nearby_traffic_pmed(database, distances):
@@ -115,7 +137,7 @@ def get_density_traffic_data(database, start, end, close):
         while not density.ready():
             time.sleep(0.01)
     logging.info('Ending retrieving traffic data at ' + datetime.datetime.now().strftime('%d-%m-%Y %H:%M:%S'))
-    return [item for sublist in density.get() for item in sublist]
+    return pd.DataFrame([item for sublist in density.get() for item in sublist])
 
 
 def get_air_quality_data(database, start, end):
@@ -124,16 +146,18 @@ def get_air_quality_data(database, start, end):
     interesting_cols = ['station', 'magnitud', 'date', 'value']
     air_data = []
     for query_date in time_axis:
-        # air = pd.DataFrame(list(air_coll.find({"dates": query_date, "station": 4, "magnitud": 8}))).rename(
-        #     columns={"dates": "date"})
-        air = pd.DataFrame(list(air_coll.find({"dates": query_date}))).rename(
-            columns={"dates": "date"})
+        if FLAGS.station is not None:
+            air = pd.DataFrame(list(air_coll.find({"dates": query_date, "station": FLAGS.station}))).rename(
+                columns={"dates": "date"})
+        else:
+            air = pd.DataFrame(list(air_coll.find({"dates": query_date}))).rename(columns={"dates": "date"})
         air_data.append(air[interesting_cols])
     return pd.concat([air for air in air_data], ignore_index=True)
 
+
 def main(argv):
-    logging.info('_' * 80)
-    logging.info('Generate dataset!')
+    logging.info('-' * 80)
+    logging.info(' ' * 20 + 'Generate dataset!')
     logging.info('_' * 80 + '\n')
 
     start_date = pd.to_datetime('{}-{}-{}'.format(FLAGS.start_date[1], FLAGS.start_date[1], FLAGS.start_date[2]),
@@ -142,37 +166,44 @@ def main(argv):
                               format='%d-%m-%Y')
 
     # Connect to the database
-    client = db.connect_mongo_daemon(host='localhost', port=27019)
+    client = db.connect_mongo_daemon(host=FLAGS.host, port=FLAGS.port)
 
     # Retrieving calendar info
     calendar_df = get_calendar_features(client, start_date, end_date)
 
     # Weather info
-    #weather_df = get_weather_features(client, start_date, end_date)
+    weather_df = get_weather_features(client, start_date, end_date)
 
     # Get air quality data
     logging.info('Retrieve info for air quality')
     air_data = get_air_quality_data(client, start_date, end_date)
-
-    air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
-    #with open(os.path.join(FLAGS.output_folder, 'air_df.pkl'), 'w') as f:
-    #    pickle.dump(air_data, f)
+    if FLAGS.station is not None:
+        air_data.drop(columns=['station'], inplace=True)
+    #air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
 
     # Get all traffic pmed in a certain radius from pollution station
     distances = {'0_500m': [0, 500], '500m_1km': [500, 1000]}
-    #closest = get_nearby_traffic_pmed(client, distances)
+    closest = get_nearby_traffic_pmed(client, distances)
 
     # Extract traffic density data
     logging.info('Retrieve info for a density info')
-    #traffic_data = get_density_traffic_data(client, start_date, end_date, closest)
-
-
-    # TO DO
+    if FLAGS.station is not None:
+        closest = {FLAGS.station: closest[FLAGS.station]}
+    traffic_data = get_density_traffic_data(client, start_date, end_date, closest)
+    if FLAGS.station is not None:
+        traffic_data.drop(columns=['reference_station'], inplace=True)
     # Join all the pieces all together
-    #calendar_df.rename(columns={'Date': 'date'}).set_index('date').join(air_data.set_index('date'))
-    #calendar_df.join(weather_df, on='date')
-    logging.info('_' * 80)
-    logging.info('Finished dataset generation!')
+    data_df = calendar_df.set_index('date').join(air_data.set_index('date'))
+    data_df = data_df.join(weather_df.set_index('date'))
+    data_df = data_df.join(traffic_data.set_index('date'))
+
+    if FLAGS.station is not None:
+        data_df.to_pickle(os.path.join(FLAGS.output_folder, 'data_station_{}_df.pkl'.format(FLAGS.station)))
+    else:
+        data_df.to_pickle(os.path.join(FLAGS.output_folder, 'data_all_stations_df.pkl'))
+
+    logging.info('-' * 80)
+    logging.info(' ' * 20 + 'Finished dataset generation!')
     logging.info('_' * 80 + '\n')
 
 
