@@ -150,7 +150,7 @@ def parse_pollution_txt(txt_file):
         if hora == 'H00':
             dd['dates'] += pd.Timedelta(1, unit='day')
         dd['value'] = df[hora].astype(np.float32)
-        pollution_month.append(list(dd.to_dict(orient='index').values()))
+         pollution_month.append(list(dd.to_dict(orient='index').values()))
 
     return [item for sublist in pollution_month for item in sublist]
 

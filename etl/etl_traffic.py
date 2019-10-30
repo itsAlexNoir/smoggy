@@ -33,6 +33,7 @@ def define_flags():
     flags.DEFINE_string(name='host', default='localhost', help='Host for Mongo DB database.')
     flags.DEFINE_integer(name='port', default=27019, help='Port connection to Mongo DB database.')
 
+
 def get_pmed_dataframes_from_paths(path):
     if not os.path.exists(path):
         logging.error('Given path for pmed dataframes does not exists.')
