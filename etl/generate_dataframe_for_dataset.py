@@ -205,8 +205,8 @@ def main(argv):
     if FLAGS.station is not None:
         data_df.to_pickle(os.path.join(FLAGS.output_folder,
                                        'data_station_{}_from_{}_to_{}_df.pkl'.format(FLAGS.station,
-                                                                                     start_date.strftime('%d-%m-%Y %H:%M:S'),
-                                                                                     end_date.strftime('%d-%m-%Y %H:%M:S'))))
+                                                                                     start_date.strftime('%d-%m-%Y'),
+                                                                                     end_date.strftime('%d-%m-%Y'))))
     else:
         data_df.to_pickle(os.path.join(FLAGS.output_folder, 'data_all_stations_df.pkl'))
 
