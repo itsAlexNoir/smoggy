@@ -9,6 +9,8 @@ from tools.etl_utils import insert_pollution_docs_to_db
 
 def define_flags():
     flags.DEFINE_string(name='source_path', default='.', help='Path to the source of the data')
+    flags.DEFINE_string('host', default='localhost', help='Host of the database')
+    flags.DEFINE_integer('port', default=None, help='Port to the database')
 
 
 def get_air_stations(source_path):
@@ -31,7 +33,7 @@ def main(argv):
 
     # Put into the database
     logging.info('Connecting with the database')
-    client = db.connect_mongo_daemon(host='localhost', port=27019)
+    client = db.connect_mongo_daemon(host=FLAGS.host, port=FLAGS.port)
     pollutiondb = db.get_mongo_database(client, 'pollution')
 
     # Load station info

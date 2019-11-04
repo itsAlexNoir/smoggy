@@ -43,8 +43,7 @@ def get_calendar_features(database, start, end):
     cal = pd.DataFrame(data={"date": calendar_date, "day": day, "month": month, "year": year,
                              "festivo": one_hot_festivo})
     dd = pd.date_range(min(calendar_date), max(calendar_date), freq='H')
-    vals_per_hour = [cal[(cal['day'] == d.day) & (cal['month'] == d.month) & (cal['year'] == d.year)][
-              'festivo'].values[0] for d in dd]
+    vals_per_hour = [cal[(cal['day'] == d.day) & (cal['month'] == d.month) & (cal['year'] == d.year)]['festivo'].values[0] for d in dd]
     return pd.DataFrame({'date': dd, 'festivo': vals_per_hour})
 
 
@@ -103,10 +102,7 @@ def retrieve_traffic_data_by_hour(query_date, close, coll):
         for dist in close[station].keys():
 
             try:
-                density_hour = pd.DataFrame([den for den in coll.find({"date": query_date,
-                                                                            "id": {"$in": list(map(int,
-                                                                                                   close[station][
-                                                                                                      dist]))}})])
+                density_hour = pd.DataFrame([den for den in coll.find({"date": query_date, "$or": [{"idelem": {"$in": list(map(int, close[station][dist]))}}, {"id": {"$in": list(map(int, close[station][dist]))}}]})])
                 dense_row.update({'date': query_date, 'reference_station': station,
                             'intensidad_media_' + dist: density_hour['intensidad'].mean(),
                             'intensidad_min_' + dist: density_hour['intensidad'].min(),
@@ -121,7 +117,7 @@ def retrieve_traffic_data_by_hour(query_date, close, coll):
                             'vmed_min_' + dist: density_hour['vmed'].min(),
                             'vmed_max_' + dist: density_hour['vmed'].max()})
             except KeyError:
-                logging.error('Exception detected for ' + query_date.strftime("%Y-%m-%d %H:%M:%S"))
+                logging.error('Data not found for {} at '.format(dist) + query_date.strftime("%Y-%m-%d %H:%M:%S"))
                 pass
         density.append(dense_row)
     return density
@@ -145,13 +141,17 @@ def get_air_quality_data(database, start, end):
     time_axis = pd.date_range(start=start, end=end, freq='H')
     interesting_cols = ['station', 'magnitud', 'date', 'value']
     air_data = []
-    for query_date in time_axis:
+    for query_date in tqdm(time_axis):
         if FLAGS.station is not None:
             air = pd.DataFrame(list(air_coll.find({"dates": query_date, "station": FLAGS.station}))).rename(
                 columns={"dates": "date"})
         else:
             air = pd.DataFrame(list(air_coll.find({"dates": query_date}))).rename(columns={"dates": "date"})
+        #try:
         air_data.append(air[interesting_cols])
+        #except KeyError:
+        #    print(query_date)
+        #    pass
     return pd.concat([air for air in air_data], ignore_index=True)
 
 
@@ -164,14 +164,19 @@ def main(argv):
                                 format='%d-%m-%Y')
     end_date = pd.to_datetime('{}-{}-{}'.format(FLAGS.end_date[0], FLAGS.end_date[1], FLAGS.end_date[2]),
                               format='%d-%m-%Y')
+    logging.info('Generating dataframes from ' + start_date.strftime('%d-%m-%Y %H:%M:S'))
+    logging.info('Generating dataframes to ' + end_date.strftime('%d-%m-%Y %H:%M:S'))
 
     # Connect to the database
+    logging.info('Connecting to the database...')
     client = db.connect_mongo_daemon(host=FLAGS.host, port=FLAGS.port)
 
     # Retrieving calendar info
+    logging.info('Extracting holidays info from calendar...')
     calendar_df = get_calendar_features(client, start_date, end_date)
 
     # Weather info
+    logging.info('Extracting weather data...')
     weather_df = get_weather_features(client, start_date, end_date)
 
     # Get air quality data
@@ -179,7 +184,7 @@ def main(argv):
     air_data = get_air_quality_data(client, start_date, end_date)
     if FLAGS.station is not None:
         air_data.drop(columns=['station'], inplace=True)
-    #air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
+    air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
 
     # Get all traffic pmed in a certain radius from pollution station
     distances = {'0_500m': [0, 500], '500m_1km': [500, 1000]}
@@ -198,7 +203,10 @@ def main(argv):
     data_df = data_df.join(traffic_data.set_index('date'))
 
     if FLAGS.station is not None:
-        data_df.to_pickle(os.path.join(FLAGS.output_folder, 'data_station_{}_df.pkl'.format(FLAGS.station)))
+        data_df.to_pickle(os.path.join(FLAGS.output_folder,
+                                       'data_station_{}_from_{}_to_{}_df.pkl'.format(FLAGS.station,
+                                                                                     start_date.strftime('%d-%m-%Y %H:%M:S'),
+                                                                                     end_date.strftime('%d-%m-%Y %H:%M:S'))))
     else:
         data_df.to_pickle(os.path.join(FLAGS.output_folder, 'data_all_stations_df.pkl'))
 

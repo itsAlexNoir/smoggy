@@ -140,6 +140,8 @@ def main(argv):
 
     # Create a compound index for effcient quering
     density_coll.create_index([("date", -1), ("id", 1)], name='traffic_index')
+    density_coll.create_index([("date", -1), ("idelem", 1)], name='traffic_index_plus')
+    density_coll.create_index([("date", -1), ("id", 1), ("idelem", 1)], name='traffic_index_all')
     logging.info('ETL process finished!')
 
 
