@@ -42,9 +42,13 @@ estaciones_aire = {'28079001': 'Plz. Recoletos', '28079002': 'Glta. Carlos V', '
               '28079059': 'Parque Juan Carlos I', '28079086': 'Tres Olivos (<2011)', '28079060': 'Tres Olivos',
               '28079099': 'Media global'}
 
-sustancias = {'01': 'SO2', '06': 'CO', '07': 'NO', '08': 'NO2', '09': 'PM2.5', '10': 'PM10', '12': 'NOx', '14': 'O3',
-              '20': 'TOL', '30': 'BEN', '35': 'EBE', '37': 'MXY', '38': 'PXY', '39': 'OXY', '42': 'TCH', '43': 'CH4',
-              '44': 'NMHC', '58': 'HCl'}
+sustancias = {1: 'SO2', 6: 'CO', 7: 'NO', 8: 'NO2', 9: 'PM2.5', 10: 'PM10', 12: 'NOx', 14: 'O3',
+              20: 'TOL', 30: 'BEN', 35: 'EBE', 37: 'MXY', 38: 'PXY', 39: 'OXY', 42: 'TCH', 43: 'CH4',
+              44: 'NMHC', 58: 'HCl'}
+
+# sustancias = {'01': 'SO2', '06': 'CO', '07': 'NO', '08': 'NO2', '09': 'PM2.5', '10': 'PM10', '12': 'NOx', '14': 'O3',
+#               '20': 'TOL', '30': 'BEN', '35': 'EBE', '37': 'MXY', '38': 'PXY', '39': 'OXY', '42': 'TCH', '43': 'CH4',
+#               '44': 'NMHC', '58': 'HCl'}
 
 mes = {1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
        9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'}

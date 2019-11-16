@@ -17,6 +17,7 @@ import multiprocessing as mp
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
 from tools import database as db
+from tools.etl_utils import sustancias
 
 # lon/lat coordinates for Puerta del Sol (Madrid city central point)
 PUERTA_SOL = [-3.703339, 40.416729]
@@ -55,6 +56,11 @@ def get_weather_features(database, start, end):
     weather_daily['day'] = weather_daily['date'].apply(lambda x: x.day)
     weather_daily['month'] = weather_daily['date'].apply(lambda x: x.month)
     weather_daily['year'] = weather_daily['date'].apply(lambda x: x.year)
+    weather_daily['prec'] = weather_daily['prec'].apply(lambda x: x.replace(',', '.'))
+    weather_daily['tmed'] = weather_daily['tmed'].fillna('20,0').apply(lambda x: x.replace(',', '.'))
+    weather_daily['velmedia'] = weather_daily['velmedia'].fillna('0,0').apply(lambda x: x.replace(',', '.'))
+    weather_daily['prec'] = weather_daily['prec'].apply(lambda x: 0.0 if x == 'Ip' else x)
+
 
     dd = pd.date_range(min(weather_daily['date']), max(weather_daily['date']), freq='H')
     vals_per_hour = [weather_daily[(weather_daily['day'] == d.day) & (weather_daily['month'] == d.month) &
@@ -155,6 +161,17 @@ def get_air_quality_data(database, start, end):
     return pd.concat([air for air in air_data], ignore_index=True)
 
 
+def sort_pollutants_in_columns(data):
+    pollutants_per_station = data['magnitud'].unique()
+    air = data[data['magnitud'] == pollutants_per_station[0]].\
+        rename(columns={'value': sustancias[pollutants_per_station[0]]}).drop(columns='magnitud').set_index('date')
+    for pol in pollutants_per_station[1:]:
+        air = air.join(data[data['magnitud'] == pol]
+                       .rename(columns={'value': sustancias[pol]}).drop(columns='magnitud').set_index('date'))
+
+    return air.reset_index()
+
+
 def main(argv):
     logging.info('-' * 80)
     logging.info(' ' * 20 + 'Generate dataset!')
@@ -184,6 +201,8 @@ def main(argv):
     air_data = get_air_quality_data(client, start_date, end_date)
     if FLAGS.station is not None:
         air_data.drop(columns=['station'], inplace=True)
+    air_data = sort_pollutants_in_columns(air_data)
+
     air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
 
     # Get all traffic pmed in a certain radius from pollution station

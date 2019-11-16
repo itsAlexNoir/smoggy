@@ -1,14 +1,15 @@
 import os
 import numpy as np
 import pandas as pd
+from glob import glob
+from tqdm import tqdm
 from absl import app, flags
 import logging
-import pickle
 #from ptools import plotting
 
 
 def define_flags():
-    flags.DEFINE_string(name='source_file', default=None, help='Path to the source of the data')
+    flags.DEFINE_string(name='source_folder', default=None, help='Path to the source of the data')
     flags.DEFINE_string(name='output_folder', default=None, help='Output folder for dataset')
 
 
@@ -55,18 +56,19 @@ def main(argv):
     logging.info('=' * 80 + '\n')
 
     logging.info('Reading dataframe from pickle...')
-    df = pd.read_pickle(FLAGS.source_file)
+    df_files = glob(os.path.join(FLAGS.source_folder, '*pkl'))
+    df = pd.concat([pd.read_pickle(file) for file in tqdm(df_files)], ignore_index=True)
     pollutant_list = df['magnitud'].unique().tolist()
 
     logging.info('Pivot all the pollutant so they can be features')
     df_per_pollutant = {pol: df[df['magnitud']==pol] for pol in pollutant_list}
     target_df = df_per_pollutant[8].drop(columns='magnitud')
-    for pol in pollutant_list:
-        target_df[pol] = df_per_pollutant[pol]['value']
+    #for pol in pollutant_list:
+    #    target_df[pol] = df_per_pollutant[pol]['value']
 
     for col in target_df.columns:
         if target_df[col].dtype == np.object:
-            target_df[col] = target_df[col].apply(lambda x: np.float32(x.replace(',', '.')))
+            target_df[col] = target_df[col].apply(lambda x: np.float32(x.replace(',', '.')) if not isinstance(x, float) else x)
 
     logging.info('Get some parameters of the dataset...')
     target_df.apply(lambda x: x.astype(np.float32))
