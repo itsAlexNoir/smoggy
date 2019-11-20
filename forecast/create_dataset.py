@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import pickle
 from glob import glob
 from tqdm import tqdm
 from absl import app, flags
@@ -58,21 +59,21 @@ def main(argv):
     logging.info('Reading dataframe from pickle...')
     df_files = glob(os.path.join(FLAGS.source_folder, '*pkl'))
     df = pd.concat([pd.read_pickle(file) for file in tqdm(df_files)], ignore_index=True)
-    pollutant_list = df['magnitud'].unique().tolist()
+    pollutant_list = ['SO2', 'CO', 'NO', 'NO2', 'NOx']
 
-    logging.info('Pivot all the pollutant so they can be features')
-    df_per_pollutant = {pol: df[df['magnitud']==pol] for pol in pollutant_list}
-    target_df = df_per_pollutant[8].drop(columns='magnitud')
-    #for pol in pollutant_list:
-    #    target_df[pol] = df_per_pollutant[pol]['value']
+    # logging.info('Pivot all the pollutant so they can be features')
+    # df_per_pollutant = {pol: df[df['magnitud']==pol] for pol in pollutant_list}
+    # target_df = df_per_pollutant[8].drop(columns='magnitud')
+    # #for pol in pollutant_list:
+    # #    target_df[pol] = df_per_pollutant[pol]['value']
 
-    for col in target_df.columns:
-        if target_df[col].dtype == np.object:
-            target_df[col] = target_df[col].apply(lambda x: np.float32(x.replace(',', '.')) if not isinstance(x, float) else x)
+    #for col in df.columns:
+    #    if target_df[col].dtype == np.object:
+    #        target_df[col] = target_df[col].apply(lambda x: np.float32(x.replace(',', '.')) if not isinstance(x, float) else x)
 
     logging.info('Get some parameters of the dataset...')
-    target_df.apply(lambda x: x.astype(np.float32))
-    n_obs = len(target_df.index)
+    #df.apply(lambda x: x.astype(np.float32))
+    n_obs = len(df.index)
     test_split = int(n_obs * 0.15)
     train_split = n_obs - test_split
 
@@ -83,11 +84,11 @@ def main(argv):
     logging.info('Number of observations in train set: {}'.format(train_split))
     logging.info('Number of observations in test set: {}'.format(test_split))
     logging.info('=====================================')
-    dataset = target_df.values
+    dataset = df.values[:, 1:].astype(np.float32)
     data_mean = dataset[:train_split].mean(axis=0)
     data_std = dataset[:train_split].std(axis=0)
     dataset = (dataset - data_mean) / data_std
-    np.nan_to_num(dataset)
+    dataset = np.nan_to_num(dataset)
 
     past_history = 5 * 24
     future_target = 6
@@ -98,16 +99,12 @@ def main(argv):
     logging.info('Step size: {}'.format(step))
     logging.info('=====================================')
 
-    x_train, y_train = multivariate_data(dataset, dataset[:, 1], 0, train_split,
-                                               past_history,
-                                               future_target, step, single_step=True)
-    x_val_single, y_val_single = multivariate_data(dataset, dataset[:, 1],
-                                                   train_split, None, past_history,
-                                                   future_target, step,
-                                                   single_step=True)
+    logging.info('Creating train data...')
+    x_train, y_train = multivariate_data(dataset, dataset[:, 4], 0, train_split, past_history,
+                                         future_target, step, single_step=True)
 
-    x_test, y_test = multivariate_data(dataset, dataset[:, 1], train_split, None,
-                                           past_history,
+    logging.info('Creating test data...')
+    x_test, y_test = multivariate_data(dataset, dataset[:, 4], train_split, None, past_history,
                                            future_target, step, single_step=True)
 
     train = {'data': x_train, 'labels': y_train}
@@ -119,7 +116,7 @@ def main(argv):
     with open(os.path.join(FLAGS.output_folder, 'test.pkl'), 'wb') as f:
         pickle.dump(test, f)
 
-    logging.info('Dataset created! Lets train dude!')
+    logging.info('Dataset created! Lets train!')
 
 
 if __name__ == '__main__':

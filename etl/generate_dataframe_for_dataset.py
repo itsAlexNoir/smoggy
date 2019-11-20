@@ -203,7 +203,7 @@ def main(argv):
         air_data.drop(columns=['station'], inplace=True)
     air_data = sort_pollutants_in_columns(air_data)
 
-    air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
+    #air_data.to_pickle(os.path.join(FLAGS.output_folder, 'air_df.pkl'))
 
     # Get all traffic pmed in a certain radius from pollution station
     distances = {'0_500m': [0, 500], '500m_1km': [500, 1000]}
@@ -219,7 +219,7 @@ def main(argv):
     # Join all the pieces all together
     data_df = calendar_df.set_index('date').join(air_data.set_index('date'))
     data_df = data_df.join(weather_df.set_index('date'))
-    data_df = data_df.join(traffic_data.set_index('date'))
+    data_df = data_df.join(traffic_data.set_index('date')).reset_index()
 
     if FLAGS.station is not None:
         data_df.to_pickle(os.path.join(FLAGS.output_folder,
