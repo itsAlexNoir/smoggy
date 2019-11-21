@@ -1,5 +1,7 @@
 import os
-import numpy as np
+import pandas as pd
+#import h5py
+from datetime import datetime
 import tensorflow as tf
 from absl import app, flags
 import logging
@@ -28,33 +30,56 @@ def load_dataset(path, BATCH_SIZE, BUFFER_SIZE):
 
     return train_set, test_set
 
+
 def main(argv):
-    logging.info('='*80)
-    logging.info(' ' * 20 + 'Create dataset')
+    logging.info('=' * 80)
+    logging.info(' ' * 20 + 'Train forecaster')
     logging.info('=' * 80 + '\n')
 
+    current_time = datetime.now().strftime('%d_%m_%Y_%H_%M_%S')
+    logging.info('Start training at ' + current_time)
     logging.info('Loading dataset from source...')
     train_set, test_set = load_dataset(FLAGS.source_path, FLAGS.batch_size, FLAGS.buffer_size)
 
     with open(os.path.join(FLAGS.source_path, 'train.pkl'), 'rb') as f:
         train = pickle.load(f)
 
-    single_step_model = tf.keras.models.Sequential()
+    single_step_model = tf.keras.models.Sequential(name='smoggy_forecaster')
     single_step_model.add(tf.keras.layers.LSTM(32, input_shape=train['data'].shape[-2:]))
     single_step_model.add(tf.keras.layers.Dense(1))
 
+    #with open(os.path.join(FLAGS.output_folder, 'smoggy_lstm_summary.txt'), 'w') as f:
+    #    f.write(single_step_model.summary())
+
+    # Define tensorboard callback
+    tensorboard_cbk = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(FLAGS.output_folder, 'tboard'))
+    checkpointing = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(FLAGS.output_folder,
+                                                                             'weights_' + current_time + '{epoch}.h5'),
+                                                       save_best_only=True,
+                                                       monitor='val_loss',
+                                                       verbose=0)
+
     single_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='mae')
 
-    EVALUATION_INTERVAL = 200
-    EPOCHS = 10
+    EVALUATION_INTERVAL = 1 #200
+    EPOCHS = 1
 
     single_step_history = single_step_model.fit(train_set, epochs=EPOCHS,
                                                 steps_per_epoch=EVALUATION_INTERVAL,
                                                 validation_data=test_set,
-                                                validation_steps=50)
+                                                validation_steps=50,
+                                                callbacks=[tensorboard_cbk, checkpointing])
     logging.info('=' * 60)
     logging.info('Training finished!')
-    logging.info('='*60)
+    logging.info('=' * 60)
+
+    logging.info('Saving training history...')
+    pd.DataFrame(data=single_step_history.history).to_csv(os.path.join(FLAGS.output_folder,
+                                                                       'history' + current_time + '.csv'))
+
+    logging.info('Saving the model...')
+    single_step_model.save(os.path.join(FLAGS.output_folder, 'smoggy_model_' + current_time + '.h5'))
+
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
