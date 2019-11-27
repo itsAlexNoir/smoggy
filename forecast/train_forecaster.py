@@ -63,7 +63,7 @@ def main(argv):
                                                        verbose=0)
     single_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(),
                               loss=tf.keras.losses.MeanAbsoluteError(),
-                              metrics=['accuracy'])
+                              metrics=['mae', 'mse'])
 
     EVALUATION_INTERVAL = 200
     EPOCHS = 1
