@@ -4,16 +4,6 @@
 This module contain routines for creating and interacting with a mongodb database.
 """
 
-__author__ = "Alejandro de la Calle"
-__copyright__ = "Copyright 2018"
-__credits__ = [""]
-__license__ = ""
-__version__ = "0.1"
-__maintainer__ = "Alejandro de la Calle"
-__email__ = "alejandrodelacallenegro@gmail.com"
-__status__ = "Development"
-
-
 #from pymongo import MongoClient
 import pymongo
 

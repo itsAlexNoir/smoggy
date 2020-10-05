@@ -1,32 +1,26 @@
 #!/usr/bin/env python
 """ request_weather_data.py
+Usage:
+    request_weather_data.py (-h | --help)
+    request_weather_data.py --init_date=<dd-mm-YYYY> --end_date=<dd-mm-YYYY> --station=<name> --apikey=<string> --out_path=<path> 
 
+Options:
+    -h --help                   Show this screen.
+    --init_date=<dd-mm-YYYY>    Initial date of the request
+    --end_date=<dd-mm-YYYY>     Final date of the request
+    --station=<name>            Name of the requested weather station
+    --apikey=<string>           Path to the API key to access the server [default: ./api-key]
+    --out_path=<path>           Path to the output folder, in which data should be downloaded.
 """
-
-__author__ = "Alejandro de la Calle"
-__copyright__ = "Copyright 2019"
-__credits__ = [""]
-__license__ = ""
-__version__ = "0.1"
-__maintainer__ = "Alejandro de la Calle"
-__email__ = "alejandrodelacallenegro@gmail.com"
-__status__ = "Development"
-
-
 import os
 import sys
 import pandas as pd
 import json
-from absl import flags, app, logging
+from docopt import docopt
+import logging
 import requests
-from tools import etl_utils as utils
 
-def define_flags():
-    flags.DEFINE_list(name='init_date', default=None, help='Initial date of the request')
-    flags.DEFINE_list(name='end_date', default=None, help='Initial date of the request')
-    flags.DEFINE_string(name='station', default=None, help='Station info')
-    flags.DEFINE_string(name='apikey', default='./api-key', help='Path to the API key')
-    flags.DEFINE_string(name='output_path', default='None', help='Path to the output folder')
+from tools import etl_utils as utils
 
 
 def request_climate_info(init_date, end_date, station=None, apikey=None):
@@ -58,28 +52,28 @@ def get_weather_info(start_date, end_date, station, output_path, apikey):
         print('Requesting from {} to {}'.format(start, end))
         monthly_weather = request_climate_info(start, end, station, apikey)
         with open(os.path.join(output_path,
-                               'weather_{}_{}.json'.format(station, start.strftime('%Y-%m'))), 'w') as f:
+                               'datos_clima_{}_{}.json'.format(station, start.strftime('%Y-%m'))), 'w') as f:
             json.dump(monthly_weather, f)
 
 
-def main(argv):
+def main(args):
 
     logging.info('=' * 80)
     logging.info(' ' * 20 + 'Request weather info')
     logging.info('=' * 80)
 
-    if FLAGS.init_date is None or FLAGS.end_date is None:
+    if args["--init_date"] is None or args["--end_date"] is None:
         logging.info('A Initial and end data for requesting data is mandatory. Please provide one.')
-        sys.exit(1)
+        sys.exit(1)        
 
-    init_date = pd.to_datetime('{}-{}-{}'.format(FLAGS.init_date[1], FLAGS.init_date[1], FLAGS.init_date[2]), format='%d-%m-%Y')
-    end_date = pd.to_datetime('{}-{}-{}'.format(FLAGS.end_date[0], FLAGS.end_date[1], FLAGS.end_date[2]), format='%d-%m-%Y')
+    init_date = pd.to_datetime(args["--init_date"], format='%d-%m-%Y')
+    end_date = pd.to_datetime(args["--end_date"], format='%d-%m-%Y')
 
     starting_months = pd.date_range(init_date, end_date, freq='MS')
     ending_months = pd.date_range(init_date, end_date, freq='M')
 
-    get_weather_info(starting_months, ending_months, FLAGS.station,
-                     FLAGS.output_path, FLAGS.apikey)
+    get_weather_info(starting_months, ending_months, args["--station"],
+                     args["--out_path"], args["--apikey"])
 
     logging.info('=' * 80)
     logging.info('Request finished')
@@ -87,6 +81,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    FLAGS = flags.FLAGS
-    define_flags()
-    app.run(main)
+    arguments = docopt(__doc__)
+    main(arguments)
